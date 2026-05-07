@@ -44,7 +44,13 @@ RUN pip install -e /workspace/colabdesign
 RUN pip install \
     pandas matplotlib biopython scipy seaborn tqdm py3dmol \
     chex dm-tree joblib ml-collections immutabledict optax \
-    cvxopt "mdtraj==1.9.9" colabfold "ipsae==1.0.1"
+    cvxopt colabfold "ipsae==1.0.1"
+
+# mdtraj 1.9.9: no cp312 aarch64 wheel; must build from source.
+# --no-build-isolation lets the build use the system setuptools/pkg_resources
+# instead of pip's isolated build env (which lacks setuptools in NGC 25.05).
+RUN pip install setuptools cython && \
+    pip install "mdtraj==1.9.9" --no-build-isolation
 
 # --- torchtyping + torch_geometric core ---
 # No -f wheel URL: aarch64 C-extension wheels (scatter/sparse) absent on data.pyg.org,
