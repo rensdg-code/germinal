@@ -5,9 +5,18 @@ Run Germinal for Antibody design.
 import time
 from omegaconf import DictConfig
 import hydra
-import pyrosetta as pr
 import numpy as np
 import torch
+
+# PyRosetta is optional — not available on Linux aarch64 as of May 2026.
+# Steps requiring it (relax, interface scoring, SAP, RMSD) will be skipped
+# gracefully when HAS_PYROSETTA is False.
+try:
+    import pyrosetta as pr
+    HAS_PYROSETTA = True
+except ImportError:
+    pr = None
+    HAS_PYROSETTA = False
 
 from germinal.design.design import germinal_design
 from germinal.filters import filter_utils, redesign
@@ -29,12 +38,20 @@ def main(cfg: DictConfig):
     )
 
     io.save_run_config(run_settings, target_settings)
+
     # initialize pyrosetta
-    pr.init(
-        f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
-        f"-holes:dalphaball {run_settings['dalphaball_path']} "
-        f"-corrections::beta_nov16 true -relax:default_repeats 1"
-    )
+    if HAS_PYROSETTA:
+        pr.init(
+            f"-ignore_unrecognized_res -ignore_zero_occupancy -mute all "
+            f"-holes:dalphaball {run_settings['dalphaball_path']} "
+            f"-corrections::beta_nov16 true -relax:default_repeats 1"
+        )
+    else:
+        print(
+            "PyRosetta not available — relax, interface scoring, SAP, and RMSD "
+            "steps will be skipped. Designs will be scored on AF3/Chai metrics only."
+        )
+
     print(f"============================\nExperiment name: {run_settings['experiment_name']}\n============================")
     print(f"Processed config: {target_settings}\n{initial_filters}\n{final_filters}")
 
@@ -51,12 +68,12 @@ def main(cfg: DictConfig):
         init_seed = int(time.time_ns()) % (2**32 - 1)
         print(f"Initial seed: {init_seed}")
         np.random.seed(init_seed)
-    
+
     start_time = time.time()
     failed_design = 0
     num_accepted = 0
     num_failed = 0
-    
+
     # =================================== Germinal hallucination loop
     for i in range(run_settings["max_trajectories"]):
         # Check termination conditions
@@ -197,7 +214,7 @@ def main(cfg: DictConfig):
             for j, abmpnn_sequence in enumerate(abmpnn_sequences):
                 mpnn_trajectory = trajectory.copy()
                 mpnn_trajectory.rename(f"{design_name}_abmpnn_{j + 1}")
-                
+
                 # run final set of filters on AbMPNN redesigned sequences
                 print("Running final filters on AbMPNN redesigned sequences")
                 filter_metrics, filter_results, accepted, final_struct, _ = (
@@ -240,7 +257,7 @@ def main(cfg: DictConfig):
                 else:
                     num_failed += 1
                 utils.clear_memory(clear_jax=False)
-    
+
     # print and save final run summary
     total_runtime = utils.get_clean_time(time.time(), start_time)
     run_summary = f"Finished all designs after {i + 1} attempted trajectories.\n" \
