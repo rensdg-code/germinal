@@ -1,0 +1,83 @@
+# syntax=docker/dockerfile:1
+# ARM64 (aarch64) build for NVIDIA Grace Hopper (Isambard-AI Phase 2).
+#
+# Key differences vs. the upstream x86-64 Dockerfile:
+#   - Base: nvcr.io/nvidia/pytorch:25.05-py3  (PyTorch + CUDA 12.7 pre-installed)
+#   - No micromamba/conda env — NGC system Python used directly
+#   - No torch/torchvision/torchaudio pip install (pre-installed; no aarch64 CUDA wheels on PyPI)
+#   - torch_geometric: core only, no -f wheel index (germinal has no scatter/sparse imports)
+#   - JAX: jax[cuda12_pip] via Google Storage (has aarch64 CUDA 12 wheels since JAX 0.4.25)
+#   - HPC-X UCX/UCC prepended to LD_LIBRARY_PATH (Apptainer ignores ldconfig cache)
+#   - dssp apt package added (Bio.PDB.DSSP in utils.py requires the dssp/mkdssp binary)
+#   - AF2-Multimer params NOT baked in — bind-mount /workspace/params at runtime
+#   - AF3 weights NOT baked in — bind-mount /workspace/af3_params at runtime
+
+FROM nvcr.io/nvidia/pytorch:25.05-py3
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    MPLBACKEND=Agg \
+    HYDRA_FULL_ERROR=1 \
+    CUDA_HOME=/usr/local/cuda \
+    XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    XLA_CLIENT_MEM_FRACTION=0.5
+
+# HPC-X UCX/UCC must come before system UCX — Apptainer ignores ldconfig cache.
+# This is required for correct MPI/NCCL behaviour on Isambard Slingshot fabric.
+ENV LD_LIBRARY_PATH=/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:${LD_LIBRARY_PATH}
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl git bzip2 aria2 ffmpeg procps tini \
+    dssp \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+# --- ColabDesign (local, pure Python + JAX) ---
+COPY setup.py README.md ./
+COPY colabdesign /workspace/colabdesign
+RUN pip install -e /workspace/colabdesign
+
+# --- Core scientific stack (no torch — already in NGC base) ---
+RUN pip install \
+    pandas matplotlib biopython scipy seaborn tqdm py3dmol \
+    chex dm-tree joblib ml-collections immutabledict optax \
+    cvxopt mdtraj colabfold "ipsae==1.0.1"
+
+# --- torchtyping + torch_geometric core ---
+# No -f wheel URL: aarch64 C-extension wheels (scatter/sparse) absent on data.pyg.org,
+# and germinal source has zero scatter/sparse imports — core package is sufficient.
+RUN pip install "torchtyping==0.1.5" "torch_geometric==2.6.*"
+
+# --- Sequence/structure prediction backends ---
+RUN pip install iglm "chai-lab==0.6.1"
+
+# --- JAX with CUDA 12 ---
+# aarch64 CUDA 12 wheels available on Google Storage since JAX 0.4.25.
+RUN pip install \
+    "jax[cuda12_pip]==0.5.3" \
+    -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+# Pin dm-haiku after JAX to avoid version conflicts
+RUN pip install "dm-haiku==0.0.13"
+RUN pip install hydra-core omegaconf
+RUN pip install --no-deps "ablang2==0.2.1" "rotary_embedding_torch==0.8.9"
+
+# --- Install germinal itself ---
+COPY . /workspace
+RUN pip install -e .
+
+# Bind-mount points — populated at runtime, not baked in:
+#   /workspace/params      ← AF2-Multimer weights (~500 MB)
+#   /workspace/af3_params  ← AF3 weights (from DeepMind)
+#   /workspace/pdbs        ← target PDB files
+#   /workspace/results     ← pipeline output
+RUN mkdir -p \
+    /workspace/params \
+    /workspace/af3_params \
+    /workspace/pdbs \
+    /workspace/results
+
+CMD ["bash"]
