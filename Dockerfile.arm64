@@ -41,14 +41,18 @@ COPY colabdesign /workspace/colabdesign
 RUN pip install -e /workspace/colabdesign
 
 # --- Core scientific stack (no torch — already in NGC base) ---
+# colabfold installed separately with --no-deps: it pins pandas<2.0 and old
+# biopython, which have no cp312 aarch64 wheels. The NGC base already provides
+# compatible pandas/biopython — skipping colabfold's deps is safe.
 RUN pip install \
     pandas matplotlib biopython scipy seaborn tqdm py3dmol \
     chex dm-tree joblib ml-collections immutabledict optax \
-    cvxopt colabfold "ipsae==1.0.1"
+    cvxopt "ipsae==1.0.1"
+RUN pip install colabfold --no-deps
 
 # mdtraj 1.9.9: no cp312 aarch64 wheel; must build from source.
-# --no-build-isolation lets the build use the system setuptools/pkg_resources
-# instead of pip's isolated build env (which lacks setuptools in NGC 25.05).
+# Requires setuptools (provides pkg_resources) and cython for C extensions.
+# --no-build-isolation uses the system env so pkg_resources is available.
 RUN pip install setuptools cython && \
     pip install "mdtraj==1.9.9" --no-build-isolation
 
