@@ -14,6 +14,21 @@
 
 FROM nvcr.io/nvidia/pytorch:25.05-py3
 
+# The NGC torch is a pre-release build (e.g. 2.6.0a0+gitXXX). Pip sees pre-release
+# versions as older than the release (2.6.0a0 < 2.6.0), so packages requiring
+# torch>=2.6.0 would replace it with a CPU-only PyPI wheel. Patch the dist-info
+# metadata to strip the pre-release/local suffix so pip treats it as the release.
+RUN python3 -c "
+import pathlib, re
+for d in pathlib.Path('/usr/local/lib').rglob('torch-*.dist-info'):
+    m = d / 'METADATA'
+    if m.exists():
+        t = m.read_text()
+        t = re.sub(r'(?m)^(Version: \d+\.\d+\.\d+).*$', r'\1', t)
+        m.write_text(t)
+        print('Patched', d.name)
+"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -62,7 +77,8 @@ RUN pip install setuptools "cython<3" && \
 RUN pip install "torchtyping==0.1.5" "torch_geometric==2.6.*"
 
 # --- Sequence/structure prediction backends ---
-RUN pip install iglm "chai-lab==0.6.1"
+# Pin transformers<5: iglm uses GPT2LMHeadModel which changed API in transformers 5.x
+RUN pip install iglm "chai-lab==0.6.1" "transformers>=4.30,<5"
 
 # --- JAX with CUDA 12 ---
 # aarch64 CUDA 12 wheels available on Google Storage since JAX 0.4.25.
