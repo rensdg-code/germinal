@@ -22,6 +22,7 @@ import subprocess
 import argparse
 import tempfile
 import os
+import platform
 import json
 import shutil
 import numpy as np
@@ -598,7 +599,7 @@ def _run_af3(
         "exec",
         "--nv",
         "--env",
-        "LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu",
+        f"LD_LIBRARY_PATH=/usr/lib/{platform.machine()}-linux-gnu",
         "--bind",
         f"{output_dir}:/root/af_output",
         "--bind",
