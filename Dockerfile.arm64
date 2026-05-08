@@ -53,7 +53,7 @@ RUN pip install colabfold --no-deps
 # mdtraj 1.9.9: no cp312 aarch64 wheel; must build from source.
 # Requires setuptools (provides pkg_resources) and cython for C extensions.
 # --no-build-isolation uses the system env so pkg_resources is available.
-RUN pip install setuptools cython && \
+RUN pip install setuptools "cython<3" && \
     pip install "mdtraj==1.9.9" --no-build-isolation
 
 # --- torchtyping + torch_geometric core ---
