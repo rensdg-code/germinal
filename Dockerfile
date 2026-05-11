@@ -69,10 +69,11 @@ RUN set -euxo pipefail; \
 RUN --mount=type=secret,id=pyrosetta_token \
     set -euxo pipefail; \
     PYROSETTA_TOKEN=$(cat /run/secrets/pyrosetta_token); \
-    curl -fsSL -o /tmp/pyrosetta.tar.xz \
+    curl -fSL --retry 3 -o /tmp/pyrosetta.tar.xz \
       -H "Authorization: Bearer ${PYROSETTA_TOKEN}" \
       -H "Accept: application/octet-stream" \
       https://api.github.com/repos/rensdg-code/pyrosetta-assets/releases/assets/417642452; \
+    [ "$(stat -c%%s /tmp/pyrosetta.tar.xz)" = "1469163256" ] || { echo "Download incomplete"; exit 1; }; \
     tar -xJf /tmp/pyrosetta.tar.xz -C /opt/conda/envs/germinal/lib/python3.10/site-packages/; \
     rm /tmp/pyrosetta.tar.xz; \
     true
