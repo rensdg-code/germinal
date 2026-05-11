@@ -73,7 +73,8 @@ RUN --mount=type=secret,id=pyrosetta_token \
       -H "Authorization: Bearer ${PYROSETTA_TOKEN}" \
       -H "Accept: application/octet-stream" \
       https://api.github.com/repos/rensdg-code/pyrosetta-assets/releases/assets/417642452; \
-    [ "$(stat -c%%s /tmp/pyrosetta.tar.xz)" = "1469163256" ] || { echo "Download incomplete"; exit 1; }; \
+    echo "Downloaded: $(stat -c%s /tmp/pyrosetta.tar.xz) bytes (expected 1469163256)"; \
+    [ "$(stat -c%s /tmp/pyrosetta.tar.xz)" = "1469163256" ] || { echo "Download incomplete"; exit 1; }; \
     tar -xJf /tmp/pyrosetta.tar.xz -C /opt/conda/envs/germinal/lib/python3.10/site-packages/; \
     rm /tmp/pyrosetta.tar.xz; \
     true
