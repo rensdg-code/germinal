@@ -5,7 +5,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-lc"]
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl git bzip2 aria2 ffmpeg procps tini xz-utils \\
+    ca-certificates curl git bzip2 aria2 ffmpeg procps tini xz-utils \
   && rm -rf /var/lib/apt/lists/*
 
 ENV MAMBA_ROOT_PREFIX=/opt/conda
