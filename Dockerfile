@@ -65,11 +65,17 @@ RUN set -euxo pipefail; \
   uv pip install rotary_embedding_torch==0.8.9 --system --no-deps; \
   true
 
-# download pyrosetta
-RUN set -euxo pipefail; \
-  uv pip install --system pyrosetta-installer; \
-  python -c "import pyrosetta_installer; pyrosetta_installer.install_pyrosetta()"; \
-  true
+# install pyrosetta from private release asset (rensdg-code/pyrosetta-assets)
+RUN --mount=type=secret,id=pyrosetta_token \
+    set -euxo pipefail; \
+    PYROSETTA_TOKEN=$(cat /run/secrets/pyrosetta_token); \
+    curl -fsSL -o /tmp/pyrosetta.tar.xz \
+      -H "Authorization: Bearer ${PYROSETTA_TOKEN}" \
+      -H "Accept: application/octet-stream" \
+      https://api.github.com/repos/rensdg-code/pyrosetta-assets/releases/assets/417642452; \
+    tar -xJf /tmp/pyrosetta.tar.xz -C /opt/conda/envs/germinal/lib/python3.10/site-packages/; \
+    rm /tmp/pyrosetta.tar.xz; \
+    true
 
 COPY . /workspace
 RUN uv pip install --system -e .
