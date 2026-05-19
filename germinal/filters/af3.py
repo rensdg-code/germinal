@@ -594,8 +594,16 @@ def _run_af3(
     databases_path = run_settings["af3_db_dir"]
     sif_path = run_settings["af3_sif_path"]
 
+    if af3_repo_path is not None:
+        alphafold_script = "/root/alphafold3/run_alphafold.py"
+        repo_bind = ["--bind", f"{af3_repo_path}:/root/alphafold3"]
+    else:
+        alphafold_script = "/app/alphafold/run_alphafold.py"
+        repo_bind = []
+
+    _singularity_bin = os.path.expanduser("~/bin/singularity")
     run_cmds = [
-        "singularity",
+        _singularity_bin,
         "exec",
         "--nv",
         "--env",
@@ -608,11 +616,10 @@ def _run_af3(
         f"{weights_path}:/root/models",
         "--bind",
         f"{databases_path}:/root/public_databases",
-        "--bind",
-        f"{af3_repo_path}:/root/alphafold3",
+        *repo_bind,
         sif_path,
-        "python",
-        "/root/alphafold3/run_alphafold.py",
+        "python3",
+        alphafold_script,
         "--model_dir=/root/models",
         "--db_dir=/root/public_databases",
         f"--output_dir={output_dir}",

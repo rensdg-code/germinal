@@ -385,6 +385,45 @@ class IO:
                     return True
         return False
 
+
+
+
+    def claim_seed(self, seed: int) -> bool:
+        """Atomically claim a seed for exclusive use by this worker.
+
+        Uses a FileLock on .claimed_seeds.txt to ensure only one worker
+        can claim a given seed. Also checks existing structure files to
+        handle restarts of partially-completed runs.
+
+        Returns:
+            True  -- seed is now claimed by this worker, safe to proceed
+            False -- seed was already claimed or has a saved structure
+        """
+        claimed_seeds_path = self.layout.root / '.claimed_seeds.txt'
+        lock = FileLock(str(claimed_seeds_path) + '.lock')
+        with lock:
+            if claimed_seeds_path.exists():
+                claimed = set(claimed_seeds_path.read_text().split())
+            else:
+                claimed = set()
+
+            seed_str = str(seed)
+            if seed_str in claimed:
+                return False
+
+            if self.check_existing_seed(seed):
+                claimed.add(seed_str)
+                with open(claimed_seeds_path, 'w') as _f:
+                    for _s in sorted(claimed, key=int):
+                        _f.write(_s + chr(10))
+                return False
+
+            claimed.add(seed_str)
+            with open(claimed_seeds_path, 'w') as _f:
+                for _s in sorted(claimed, key=int):
+                    _f.write(_s + chr(10))
+            return True
+
     def check_termination_conditions(
         self, run_settings: Dict[str, Any], n_trajectories: int
     ):

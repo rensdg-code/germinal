@@ -200,9 +200,17 @@ def run_filters(
         interface_metrics = _dummy_interface_metrics()
 
     # ========================== Secondary structure content ==========================
-    ss_content = utils.calc_ss_percentage(
-        external_pdb, run_settings, binder_chain, return_dict=True, target_chain=target_chain
-    )
+    try:
+        ss_content = utils.calc_ss_percentage(
+            external_pdb, run_settings, binder_chain, return_dict=True, target_chain=target_chain
+        )
+    except Exception as e:
+        print(f'DSSP failed ({e}), using zero secondary structure content.')
+        ss_content = {
+            'alpha_': 0.0, 'beta_': 0.0, 'loops_': 0.0,
+            'alpha_i': 0.0, 'beta_i': 0.0, 'loops_i': 0.0,
+            'i_plddt': 0.0, 'ss_plddt': 0.0,
+        }
 
     # ========================== Calculate number of framework mutations ==========================
     n_framework_mutations, framework_mutations = get_framework_mutations(
@@ -317,13 +325,17 @@ def run_filters(
     # ========================== Get Log-likelihood from AbLM ==========================
     ablm_model_name = run_settings.get("ablm_model", "iglm")
     if ablm_model_name == "iglm":
-        lm_ll = get_iglm_ll(
-            sequence=trajectory_sequence,
-            species_token=run_settings["iglm_species"],
-            vh_first=run_settings["vh_first"],
-            vh_len=run_settings["vh_len"],
-            vl_len=run_settings["vl_len"],
-        )
+        try:
+            lm_ll = get_iglm_ll(
+                sequence=trajectory_sequence,
+                species_token=run_settings["iglm_species"],
+                vh_first=run_settings["vh_first"],
+                vh_len=run_settings["vh_len"],
+                vl_len=run_settings["vl_len"],
+            )
+        except Exception as e:
+            print(f"IgLM log-likelihood failed ({e}), setting lm_ll=-100.")
+            lm_ll = -100
     elif ablm_model_name == "ablang":
         lm_ll = get_ablang_ll(
             sequence=trajectory_sequence,

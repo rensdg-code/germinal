@@ -1,7 +1,15 @@
+# torchvision._meta_registrations fails in this container (torchvision::nms C++ op
+# not registered before fake implementations run). This cascades into transformers 5.8.0
+# breaking GPT2LMHeadModel. Stub the module before torchvision is first imported.
+import sys as _sys
+from unittest.mock import MagicMock as _MagicMock
+_sys.modules.setdefault("torchvision._meta_registrations", _MagicMock())
+
 """
 Run Germinal for Antibody design.
 """
 
+import os
 import time
 from omegaconf import DictConfig
 import hydra
@@ -94,8 +102,8 @@ def main(cfg: DictConfig):
         # Unique design name
         design_name = f"{target_settings['target_name']}_{run_settings['type']}_s{seed}"
 
-        if io.check_existing_seed(seed):
-            print(f"Trajectory {i} with seed {seed} already exists. Trying new seed.")
+        if not io.claim_seed(seed):
+            print(f"Trajectory {i} with seed {seed} already claimed or exists. Trying new seed.")
             continue
 
         trajectory = Trajectory(
@@ -266,7 +274,9 @@ def main(cfg: DictConfig):
                   f"{num_accepted} designs passed all filters and were accepted.\n" \
                   f"Elapsed: {total_runtime}."
     print(run_summary)
-    with open(str(io.layout.root / "run_summary.txt"), "w") as f:
+    worker_id = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
+    summary_path = io.layout.root / f"run_summary_worker{worker_id}.txt"
+    with open(str(summary_path), "w") as f:
         f.write(run_summary)
 
 

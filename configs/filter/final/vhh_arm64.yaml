@@ -1,0 +1,38 @@
+# @package filter.final
+# ARM64-compatible final filter — excludes PyRosetta-dependent metrics.
+#
+# Metrics excluded (require PyRosetta — unavailable on linux-aarch64):
+#   sc_rmsd                  side-chain RMSD after FastRelax
+#   interface_shape_comp     Rosetta shape complementarity
+#   interface_hbonds         Rosetta H-bond count at interface
+#   surface_hydrophobicity   SAP score
+#   interface_hydrophobicity Rosetta interface hydrophobicity
+#   binder_near_hotspot      CDR proximity to hotspot residues
+#   cdr3_hotspot_contacts    CDR3 contact count with hotspot residues
+#
+# Note on binder_near_hotspot and cdr3_hotspot_contacts:
+#   Without PyRosetta these always return (True, 0). Including them would
+#   make binder_near_hotspot==true a vacuous pass and cdr3_hotspot_contacts>0
+#   an unconditional fail. Excluded on ARM64 for this reason.
+#   On x86 with PyRosetta, use configs/filter/final/vhh.yaml instead,
+#   which enforces that CDR3 actually contacts the hotspot residues.
+#
+# external_plddt relaxed 0.87 -> 0.86 on 2026-05-14 (Run 4 onwards).
+clashes:
+  value: 1
+  operator: '<'
+pdockq2:
+  value: 0.23
+  operator: '>'
+external_plddt:
+  value: 0.86
+  operator: '>'
+external_iptm:
+  value: 0.74
+  operator: '>'
+external_ptm:
+  value: 0.84
+  operator: '>'
+external_pae:
+  value: 7.5
+  operator: '<'

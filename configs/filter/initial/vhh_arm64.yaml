@@ -1,0 +1,12 @@
+# @package filter.initial
+# ARM64-compatible initial filter — clash check only.
+#
+# The full initial filter (configs/filter/initial/vhh.yaml) additionally checks:
+#   binder_near_hotspot    — requires PyRosetta, always returns True on ARM64
+#   cdr3_hotspot_contacts  — requires PyRosetta, always returns 0 on ARM64
+#   percent_interface_cdr  — CDR fraction of interface residues
+#   interface_shape_comp   — Rosetta shape complementarity
+# These are excluded here because PyRosetta is unavailable on linux-aarch64.
+clashes:
+  value: 1
+  operator: '<'
