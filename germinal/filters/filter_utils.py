@@ -200,17 +200,9 @@ def run_filters(
         interface_metrics = _dummy_interface_metrics()
 
     # ========================== Secondary structure content ==========================
-    try:
-        ss_content = utils.calc_ss_percentage(
-            external_pdb, run_settings, binder_chain, return_dict=True, target_chain=target_chain
-        )
-    except Exception as e:
-        print(f'DSSP failed ({e}), using zero secondary structure content.')
-        ss_content = {
-            'alpha_': 0.0, 'beta_': 0.0, 'loops_': 0.0,
-            'alpha_i': 0.0, 'beta_i': 0.0, 'loops_i': 0.0,
-            'i_plddt': 0.0, 'ss_plddt': 0.0,
-        }
+    ss_content = utils.calc_ss_percentage(
+        external_pdb, run_settings, binder_chain, return_dict=True, target_chain=target_chain
+    )
 
     # ========================== Calculate number of framework mutations ==========================
     n_framework_mutations, framework_mutations = get_framework_mutations(
@@ -325,17 +317,13 @@ def run_filters(
     # ========================== Get Log-likelihood from AbLM ==========================
     ablm_model_name = run_settings.get("ablm_model", "iglm")
     if ablm_model_name == "iglm":
-        try:
-            lm_ll = get_iglm_ll(
-                sequence=trajectory_sequence,
-                species_token=run_settings["iglm_species"],
-                vh_first=run_settings["vh_first"],
-                vh_len=run_settings["vh_len"],
-                vl_len=run_settings["vl_len"],
-            )
-        except Exception as e:
-            print(f"IgLM log-likelihood failed ({e}), setting lm_ll=-100.")
-            lm_ll = -100
+        lm_ll = get_iglm_ll(
+            sequence=trajectory_sequence,
+            species_token=run_settings["iglm_species"],
+            vh_first=run_settings["vh_first"],
+            vh_len=run_settings["vh_len"],
+            vl_len=run_settings["vl_len"],
+        )
     elif ablm_model_name == "ablang":
         lm_ll = get_ablang_ll(
             sequence=trajectory_sequence,
@@ -748,19 +736,58 @@ def get_iglm_ll(
     vh_len=0,
     vl_len=0,
 ):
-    """Calculate antibody sequence log-likelihood using IgLM."""
-    model = IgLM()
+    """Calculate antibody sequence log-likelihood using IgLM.
+
+    ARM64 fix: BertTokenizerFast (and BertTokenizer) in the container's
+    transformers version do not load single-character amino-acid tokens into
+    tok.vocab, so every AA maps to [UNK] and the IgLM assertion fires.
+    We load the vocab.txt directly and implement log_likelihood ourselves
+    using the GPT2 model weights (which load fine on GPU compute nodes).
+    """
+    import os
+    import torch
+    import torch.nn.functional as F
+    import iglm as _iglm_pkg
+
+    model_obj = IgLM()
+
+    # Build vocab dict directly from vocab.txt.
+    vocab_file = os.path.join(
+        os.path.dirname(_iglm_pkg.__file__), "trained_models", "vocab.txt"
+    )
+    with open(vocab_file) as _f:
+        _vocab = {tok.strip(): idx for idx, tok in enumerate(_f)}
+    _unk_id = _vocab["[UNK]"]
+
+    def _ll(seq, chain_tok, species_tok):
+        tokens = [chain_tok, species_tok] + list(seq) + ["[SEP]"]
+        ids = [_vocab.get(t, _unk_id) for t in tokens]
+        bad = [t for t, i in zip(tokens, ids) if i == _unk_id]
+        if bad:
+            raise AssertionError(f"Unrecognized token(s) in sequence: {bad}")
+        token_tensor = torch.tensor([ids], dtype=torch.int).to(model_obj.device)
+        with torch.no_grad():
+            logits = model_obj.model(token_tensor).logits
+        # Mirrors IgLM log_likelihood: eval_start=1, skip chain_token position,
+        # score species_token through [SEP].
+        shift_logits = logits[..., 1:-1, :].contiguous()
+        shift_labels = token_tensor[..., 2:].contiguous().long()
+        nll = F.cross_entropy(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1),
+            reduction="mean",
+        )
+        return -nll.item()
 
     if vl_len and vh_len:
         if vh_first:
-            log_likelihood_h = model.log_likelihood(sequence[:vh_len], "[HEAVY]", species_token)
-            log_likelihood_l = model.log_likelihood(sequence[-vl_len:], "[LIGHT]", species_token)
+            log_likelihood = _ll(sequence[:vh_len], "[HEAVY]", species_token) + \
+                             _ll(sequence[-vl_len:], "[LIGHT]", species_token)
         else:
-            log_likelihood_l = model.log_likelihood(sequence[:vl_len], "[LIGHT]", species_token)
-            log_likelihood_h = model.log_likelihood(sequence[-vh_len:], "[HEAVY]", species_token)
-        log_likelihood = log_likelihood_h + log_likelihood_l
+            log_likelihood = _ll(sequence[:vl_len], "[LIGHT]", species_token) + \
+                             _ll(sequence[-vh_len:], "[HEAVY]", species_token)
     else:
-        log_likelihood = model.log_likelihood(sequence, chain_token, species_token)
+        log_likelihood = _ll(sequence, chain_token, species_token)
 
     return log_likelihood
 
