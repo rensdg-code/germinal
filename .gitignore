@@ -35,3 +35,19 @@ configs/filter/*/vhh_nohotspot*.yaml
 
 # Jupyter artifacts
 **/.ipynb_checkpoints/
+
+# Project-specific target configs (not pipeline code)
+configs/target/adamts7*.yaml
+
+# Project-specific protein structure files
+pdbs/adamts7*.pdb
+
+# Project-specific Slurm job scripts
+slurm/run_adamts7*.sbatch
+slurm/gln182_v1*
+
+# Obsolete filter config names (superseded by vhh_arm64.yaml)
+configs/filter/*/vhh_nohotspot*.yaml
+
+# Jupyter artifacts
+**/.ipynb_checkpoints/
